@@ -20,27 +20,49 @@ from typing import List
 
 
 class Counter(object):
+    """
+    A simple counter class.
+
+    Attributes:
+        value (int): The current count.
+    """
+
     def __init__(self) -> None:
+        """
+        Initializes the Counter instance with a count of 0.
+        """
         self.value = 0
 
     def increase(self):
+        """
+        Increases the count by 1.
+        """
         self.value += 1
 
     def equals(self, target):
+        """
+        Checks if the current count equals the target value.
+
+        Args:
+            target (int): The target value to compare against.
+
+        Returns:
+            bool: True if the current count equals the target, False otherwise.
+        """
         return self.value == target
 
 
 class HierarchicalEntity(ABC):
     """
     An abstract base class representing a hierarchical entity in a file system,
-    like a file or directory. It provides functionality to manage the hierarchy
-    and the status (open or closed) of the entity.
+    such as a file or directory. This class provides functionality to manage the hierarchy,
+    status (open or closed) of the entity, and interaction with its contents.
 
     Attributes:
         path (str): The file system path of the entity.
         opened (bool): Indicates whether the entity is open.
-        contents (List[HierarchicalEntity]): List of contained hierarchical entities.
-        opened_time (int): The time at which the entity was opened.
+        opened_time (int): The time at which the entity was opened, or None if not opened.
+        contents (List[HierarchicalEntity]): A list of contained hierarchical entities.
     """
 
     cur_time = 0  # Static variable to keep track of the current time across instances.
@@ -56,7 +78,6 @@ class HierarchicalEntity(ABC):
         self.opened: bool = False
         self.opened_time = None  # None indicates the entity has not been opened.
         self.contents: List[HierarchicalEntity] = []
-        self.index = 0
 
     @abstractmethod
     def _path_matches(self, path: str) -> bool:
@@ -73,6 +94,12 @@ class HierarchicalEntity(ABC):
 
     @abstractmethod
     def _can_open(self) -> bool:
+        """
+        Abstract method to determine if the entity can be opened.
+
+        Returns:
+            bool: True if the entity can be opened, False otherwise.
+        """
         pass
 
     @abstractmethod
@@ -133,6 +160,10 @@ class HierarchicalEntity(ABC):
                 content._close()
 
     def _open(self) -> None:
+        """
+        Opens this entity. If not already opened, updates the opened status,
+        sets the opened time, and calls _fill_contents to populate the contents.
+        """
         if not self.opened:
             self.opened = True
             self.opened_time = HierarchicalEntity.cur_time
@@ -163,6 +194,16 @@ class HierarchicalEntity(ABC):
         return False
 
     def open_by_index(self, target_idx: int, cur_idx: Counter = None) -> bool:
+        """
+        Opens the entity by its index in a sequence.
+
+        Args:
+            target_idx (int): The target index to match for opening.
+            cur_idx (Counter, optional): The current index counter, used for recursive calls.
+
+        Returns:
+            bool: True if the entity or any contained entity was successfully opened by index, False otherwise.
+        """
         if cur_idx is None:
             cur_idx = Counter()
 
@@ -251,7 +292,6 @@ class HierarchicalEntity(ABC):
         Returns:
             int: Number of tokens in the string representation.
         """
-        # return 0
         encoding = tiktoken.encoding_for_model(MODEL)
         string_representation = self.to_str()
         tokens = encoding.encode(string_representation)
@@ -280,6 +320,12 @@ class Directory(HierarchicalEntity):
         return self.path.endswith(path)
 
     def _can_open(self) -> bool:
+        """
+        Checks if the directory can be opened.
+
+        Returns:
+            bool: Always true, as directories can always be opened.
+        """
         return True
 
     def _fill_contents(self) -> None:
@@ -339,6 +385,12 @@ class File(HierarchicalEntity):
         return self.path.endswith(path)
 
     def _can_open(self) -> bool:
+        """
+        Checks if the file is a text file, and therefore can be opened.
+
+        Returns:
+            bool: True if the file is a text file, False otherwise.
+        """
         return self.is_text
 
     def _fill_contents(self) -> None:
@@ -427,6 +479,12 @@ class Block(HierarchicalEntity):
         return path in self.path
 
     def _can_open(self) -> bool:
+        """
+        Checks if the block contains any subblocks within it, and therefore can be opened.
+
+        Returns:
+            bool: True if the contains any subblocks, False otherwise.
+        """
         return len(self.contents) > 0
 
     def _fill_contents(self) -> None:
@@ -445,7 +503,16 @@ class Block(HierarchicalEntity):
         return self.path
 
 
-def is_int(s):
+def is_int(s: str) -> bool:
+    """
+    Checks if the input can be converted to an integer.
+
+    Args:
+        s (str): The string to check.
+
+    Returns:
+        bool: True if the string can be converted to an integer, False otherwise.
+    """
     try:
         int(s)
         return True
@@ -455,39 +522,36 @@ def is_int(s):
 
 MODEL = "gpt-4"
 TOKEN_LIMIT = 1000
-MESSAGE = """A user has asked the following query: "{query}"
+MESSAGE = """A user has asked the following query: "%s"
 
 The file structure of the user's program is the following:
-{files}
+```
+%s
+```
 
-You have already expanded some sections of the file structure. To solve the user's query, you may explore the file structure further, or if you think that you have everything you need, you can provide the solution in text form. You can expand parts of the file structure that are collapsed by entering in the number before the ellipses. Try to expand files as much as possible before solving the user's query, as it is best to explore the user's code in detail.
+You have already expanded some sections of the file structure. To solve the user's query, you may explore the file structure further, or if you think that you have everything you need, you can provide the solution in text form. You can expand parts of the file structure that are collapsed by entering in the number before the ellipses. Try to expand files as much as possible before solving the user's query, as it is best to explore the user's code in detail. Your answer should be formatted in one of two formats. If you need to explore the file structure further, if the current file structure does not provide enough information to solve the query, or if you need more details about certain parts of the code to provide a better response, you can use the first format. Here is an example of a message sent using the first format:
+{"thoughts": your thoughts, "command": your command}
 
-Your answer should be formatted in one of two formats. If you need to explore the file structure further, if the current file structure does not provide enough information to solve the query, or if you need more details about certain parts of the code to provide a better response, you can send a response in the following format:
-### Thoughts
-Try to think through step-by-step how you would solve the user's query. Explain what files and parts of files are useful to look at.
-### Command
-(a single number, representing which part of the file structure to expand)
+Your thoughts should be a string, containing a step-by-step approach to how you would solve the user's query. Explain what files and parts of files are useful to look at. After listing a few sections to explore, decide on one as the best option. Your command should be a single integer, corresponding to a section of the code that has been collapsed into ellipses. This field should only contain this number.
 
-Otherwise, if you truly have everything necessary to solve the user's query, including all code snippets that are necessary to understand the user's code and explain to the user how they should solve their query, you can use the following format:
-### Thoughts
-I have everything I need to solve the user's query.
-### Message
-You should explain in great detail to the user how they should solve their query. Provide code if that is relevant.
+If you truly have everything necessary to solve the user's query, including all code snippets that are necessary to understand the user's code and explain to the user how they should solve their query, you can use the following format:
+{"message": your message}
 
-Remember, you should only use the second format if you can precisely tell the user how to solve their query. If you are unsure where to edit in the code or what specifically to add, you should use the first command to explore the code more. Now, attempt to solve the query. To repeat, the user's query is "{query}". Please provide your answer in one of the two given formats."""
+Your message should explain in great detail to the user how they should solve their query. Provide code if that is relevant. Remember, you should only use the second format if you can precisely tell the user how to solve their query. If you are unsure where to edit in the code or what specifically to add, you should use the first command to explore the code more. Now, attempt to solve the query. To repeat, the user's query is "%s\""""
 
 
-root_dir = "src"
-query = """I get this error when running my code: AttributeError: 'MidiInput' object has no attribute 'on_pdate' Can you fix this?"""
+root_dir = "/Users/cravuri/Projects/MIT/21M.385/banger"
+query = """I get this error: AttributeError: 'MidiInput' object has no attribute 'on_pdate' Can you fix this?"""
 
 root = Directory(root_dir)
+root.open(root_dir)
 while True:
     prev_size = root.size()
     while root.size() > TOKEN_LIMIT:
         root.close_oldest()
     cur_size = root.size()
 
-    message = MESSAGE.format(query=query, files=root.to_str())
+    message = MESSAGE % (query, root.to_str(), query)
     print(root.to_str())
     pyperclip.copy(message)
 
