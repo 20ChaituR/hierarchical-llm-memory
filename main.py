@@ -7,8 +7,6 @@ from typing import List
 
 
 # TODO:
-# - Save thought history, so it doesn't go in circles doing the same thing
-#     - Make thought history an LRU cache
 # - Right now it only supports query -> response, no chat functionality
 #     - Can possibly implement chat by replacing {query} with chat history
 #       (so instead of just a user query, it is the full chat history of user
@@ -39,7 +37,7 @@ RESPONSE = """The following is the file structure after executing your given com
 %s
 ```
 
-Please summarize what has happened so far. Explain if you are currently on the right track, or if anything unexpected happened. Be sure to question your assumptions, as the file and code structure may not be what you expect. To repeat, the user's query is "%s\""""
+Summarize what has happened so far. Explain if you are currently on the right track, or if anything unexpected happened. Be sure to question your assumptions, as the file and code structure may not be what you expect. Respond in plaintext, giving only the explanation and no JSON. To repeat, the user's query is "%s"."""
 SUMMARY = """
 
 You have already been exploring this code for some time, and the following is a summary of your previous thoughts and what you have done so far:
@@ -64,20 +62,10 @@ query = """Right now, the IntroScreen button is slightly off-center. Can you tel
 
 root = Directory(root_dir)
 client = OpenAI()
-thoughts = [
-    "To solve the user's query, I need to explore the provided file structure and find all the relevant files. So, I should open the root directory to see how the user's files are structured."
-]
 summary = "To solve the user's query, I need to explore the file structure to find the relevant files. So far, I have opened the root directory and observed the top level structure. Nothing unexpected has happened, and I should continue exploring the user's file structure."
 root.open(root_dir)
 while True:
-    while num_tokens(thoughts) > THOUGHT_TOKEN_LIMIT:
-        thoughts.pop(0)
-
-    if summary is None:
-        message = MESSAGE % (query, root.to_str(), "")
-    else:
-        message = MESSAGE % (query, root.to_str(), SUMMARY % summary)
-
+    message = MESSAGE % (query, root.to_str(), SUMMARY % summary)
     response = client.chat.completions.create(
         model=MODEL,
         response_format={"type": "json_object"},
@@ -90,8 +78,7 @@ while True:
 
     if "message" in content:
         break
-    elif "thoughts" in content and "command" in content:
-        thoughts.append(content["thoughts"])
+    elif "command" in content:
         command = content["command"]
         root.open_by_index(command)
         while root.size() > FILE_TOKEN_LIMIT:
@@ -99,6 +86,7 @@ while True:
 
     response = client.chat.completions.create(
         model=MODEL,
+        response_format={"type": "text"},
         messages=[
             {"role": "user", "content": message},
             {"role": "assistant", "content": response.choices[0].message.content},
@@ -106,5 +94,3 @@ while True:
         ],
     )
     summary = response.choices[0].message.content
-    print(RESPONSE % (root.to_str(), query))
-    print(summary)
